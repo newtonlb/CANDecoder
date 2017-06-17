@@ -30,7 +30,8 @@ output reg getframe = 0,
 output reg ext_frame = 0,
 output reg std_frame = 0,
 output reg rtr_ext = 1'bz,
-output reg remote_frame = 0
+output reg remote_frame = 0,
+output reg [3:0] data_size
 );
 
     /*input reset;
@@ -50,6 +51,10 @@ output reg remote_frame = 0
 	reg[7:0] state = 0;
 	reg [9:0] count = 0; //vai contar os bits do Arbitration Field
 	reg s0;
+	reg r0;
+	reg r1;
+	reg r2;
+	
     
 
     always @(posedge sample)
@@ -147,6 +152,7 @@ output reg remote_frame = 0
 			rtr_ext = can_data;
 			if(rtr_ext == 0)
 			begin
+			$display("ele ta acusando que eh um data frame");
 				data_frame = 1;
 	      			//é um frame de dados estendido
 			end
@@ -155,16 +161,47 @@ output reg remote_frame = 0
 				remote_frame = 1;
 				//é um remote frame estendido
 			end
-			state = 5;
+			state = 6; //pegar os dois bits reservados
+			count = 2;
 
 		
 		end
 		
 
-		5: begin
+		5: begin //tratar bit reservado frame dados
+			r0 = can_data;
+			count = 4;			
+			state = 7;
+		end
+		
+		6: begin //pegando os dois bits reservados do esetendido
+			count = count -1;
+			$display("can_data %h count %d", can_data, count);
+			if (count == 0)
+			begin
+				state = 7;
+				count = 4;
+			end
+			else
+			begin
+				state = 6;
+			end
+
+		end
+		7: begin //pegar os 4 bits indicando a quantidade de bytes de dados
+			data_size[count-1] = can_data;
+			count = count -1;
+			if(count == 0)
+			begin
+				//vai pegar os dados agora
+				state = 8;
+			end
+		end
+
+                8: begin
 			getframe = 1;
 		end
-                default: begin
+		default: begin
                     $display ("Reach undefined state");
                 end
       endcase

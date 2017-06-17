@@ -14,18 +14,20 @@ module testbench;
 	wire std_frame;
 	wire rtr_ext;
 	wire remote_frame;
+	wire [3:0] data_size;
 	
 
 	reg [9:0] contador=1;
-	//frame de dados 11 bits
-	//reg [18:0] mensagem = {5'b11111, 1'b0, 11'h551, 2'b00};
+	//frame de dados 11 bits 4 bytes de dados
+	//reg [23:0] mensagem = {5'b11111, 1'b0, 11'h551, 3'b000, 4'b0100};
 	//frame remote reqest 11 bits/
 	//reg [18:0] mensagem = {5'b11111, 1'b0, 11'h551, 2'b10};
 	//data frame extended frame
-	//reg [35:0] mensagem = {2'b11, 1'b0, 11'h552, 2'b11, 18'h8320, 2'b00};
+	reg [40:0] mensagem = {2'b11, 1'b0, 11'h552, 2'b11, 18'h8320, 3'b000, 4'b1000};
 	
+   
 	//remote request extended frame
-	reg [35:0] mensagem = {2'b11, 1'b0, 11'h552, 2'b11, 18'h8320, 2'b10};
+	//reg [35:0] mensagem = {2'b11, 1'b0, 11'h552, 2'b11, 18'h8320, 2'b10};
 	//frame_builder f(.*);
 	//logic A, clk;
 	//logic [127:0]buffer;
@@ -45,12 +47,13 @@ module testbench;
 	.ext_frame(ext_frame),
 	.std_frame(std_frame),
 	.rtr_ext(rtr_ext),
-	.remote_frame(remote_frame)
+	.remote_frame(remote_frame),
+	.data_size(data_size)
 	);
 	
 	always begin
 		sample = 1;
-		can_data = mensagem[36-contador];
+		can_data = mensagem[41-contador];
 		$display(" enviando bit: %h", can_data);
 		#1 //10nsec
 		sample = 0;
@@ -66,6 +69,7 @@ module testbench;
 			begin
 				$display("                                            ");
 				$display("frame de dados ID [11-bits] da mensagem: %h" , bit_id_11);
+				$display("tamanho do dado: %d", 8*data_size);
 			end
 			if(remote_frame)
 			begin
@@ -81,6 +85,7 @@ module testbench;
 			begin
 				$display("                                            ");
 				$display("frame de dados ID [11-bits] da mensagem: %h" , bit_id_29);
+				$display("tamanho do dado: %d", data_size);
 			end
 			if(remote_frame)
 			begin
