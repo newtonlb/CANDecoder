@@ -25,6 +25,8 @@ input sample,
 output reg [10:0] bit_id_11 =11'bz,
 output reg [28:0] bit_id_29 = 29'bz,
 output reg [1:0] srr_rtr_ide = 0,
+output reg [3:0] data_code =0,
+output reg [64:0] data_field = 64'bz, // dados do data field pode ter atÃ© 64 bits
 output reg data_frame = 0,
 output reg getframe = 0,
 output reg ext_frame = 0,
@@ -62,148 +64,159 @@ output reg [3:0] data_size
         case (state)
                 0 : begin
                     	if ((can_data == 0)) // start of frame
-			begin
-				state = 1;
-				count = 29;
-			
-                    	
-                    	
-			end
-			else //bit 1
-			begin
-				state = 0;
-				count = count + 1;
-				if(count == 6)
-				begin
-					$display ("deu erro");//vai dar erro aqui pq veio 6 bits 1
-				end
-			end
-				
+							begin
+								state = 1;
+								count = 29;
+							
+											
+											
+							end
+							else //bit 1
+							begin
+								state = 0;
+								count = count + 1;
+								if(count == 6)
+								begin
+									$display ("deu erro");//vai dar erro aqui pq veio 6 bits 1
+								end
+							end
+								
                         
                 end
                 1 : begin
-			state = 1;
-			arbitration_field[count-1] = can_data;
-			count = count -1;
-			if(count == 18) // pegou os 11 bits
-			begin
-				state = 2;
-				count = 2;
-			end
-                    	 // Acabou o Arbitration Field
-                        
-                    	// Inserting 'else' block to prevent latch inference
+							state = 1;
+							arbitration_field[count-1] = can_data;
+							count = count -1;
+							if(count == 18) // pegou os 11 bits
+							begin
+								state = 2;
+								count = 2;
+							end
+											 // Acabou o Arbitration Field
+												
+											// Inserting 'else' block to prevent latch inference
                 end
                 2 : begin
                     	srr_rtr_ide[count -1] = can_data;
-			count = count -1;
-			if(count == 0)
-			begin
-				if(srr_rtr_ide == 2'b00)// é um frame de dados, 11 bits
-				
-				begin
-					$display ("é um frame de dados, 11 bits");
-					bit_id_11 = arbitration_field[28:18];
-					data_frame = 1;
-					std_frame = 1;
-					state = 5;
+							count = count -1;
+							if(count == 0)
+							begin
+								if(srr_rtr_ide == 2'b00)// ï¿½ um frame de dados, 11 bits
+								
+								begin
+									$display ("ï¿½ um frame de dados, 11 bits");
+									bit_id_11 = arbitration_field[28:18];
+									data_frame = 1;
+									std_frame = 1;
+									state = 5;
+									count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
 
-				end
-				if(srr_rtr_ide == 2'b10)// é um frame remote request, 11 bits
-				begin
-					$display ("eh um remote request, 11 bits");
-					bit_id_11 = arbitration_field[28:18];
-					std_frame = 1;
-					remote_frame = 1;
-					state = 5;
-					
-				end
-				if(srr_rtr_ide == 2'b11) //é o srr e é um frame de 29 bits
-					
-				begin
-					$display ("eh um frame de 29 bits");
-					bit_id_11 = arbitration_field[28:18];
-					ext_frame = 1;
-					count = 18;
-					state = 3;
-				
-				end
+
+								end
+								if(srr_rtr_ide == 2'b10)// ï¿½ um frame remote request, 11 bits
+								begin
+									$display ("eh um remote request, 11 bits");
+									bit_id_11 = arbitration_field[28:18];
+									std_frame = 1;
+									remote_frame = 1;
+									state = 5;
+									count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
+
+									
+								end
+								if(srr_rtr_ide == 2'b11) //ï¿½ o srr e ï¿½ um frame de 29 bits
+									
+								begin
+									$display ("eh um frame de 29 bits");
+									bit_id_11 = arbitration_field[28:18];
+									ext_frame = 1;
+									count = 18;
+									state = 3;
+								
+								end
                	 	end
-		end
-		
-		3: begin //se for 29 bits, tem que pegar o resto do ID
-		
-		
-			
-			arbitration_field[count-1] = can_data;	
-			count = count -1;
-			
-			if (count == 0) //terminou os 29-bits
-			begin 
-				bit_id_29[28:0] = arbitration_field[28:0];
-				state = 4; //vai pegar o RTR do estendido
-			end
-			
-				
-				
-		end
+						end
+						
+						3: begin //se for 29 bits, tem que pegar o resto do ID
+						
+						
+							
+							arbitration_field[count-1] = can_data;	
+							count = count -1;
+							
+							if (count == 0) //terminou os 29-bits
+							begin 
+								bit_id_29[28:0] = arbitration_field[28:0];
+								state = 4; //vai pegar o RTR do estendido
+							end
+							
+								
+								
+						end
 
-		4: begin //um estado só pra pegar o rtr do estendido
-			rtr_ext = can_data;
-			if(rtr_ext == 0)
-			begin
-			$display("ele ta acusando que eh um data frame");
-				data_frame = 1;
-	      			//é um frame de dados estendido
-			end
-			if(rtr_ext == 1)
-			begin
-				remote_frame = 1;
-				//é um remote frame estendido
-			end
-			state = 6; //pegar os dois bits reservados
-			count = 2;
+						4: begin //um estado sï¿½ pra pegar o rtr do estendido
+							rtr_ext = can_data;
+							if(rtr_ext == 0)
+							begin
+							$display("ele ta acusando que eh um data frame");
+								data_frame = 1;
+										//ï¿½ um frame de dados estendido
+							end
+							if(rtr_ext == 1)
+							begin
+								remote_frame = 1;
+								//ï¿½ um remote frame estendido
+							end
+							state = 6; //pegar os dois bits reservados
+							count = 2;
 
+						
+						end
 		
-		end
-		
 
-		5: begin //tratar bit reservado frame dados
-			r0 = can_data;
-			count = 4;			
-			state = 7;
-		end
-		
-		6: begin //pegando os dois bits reservados do esetendido
-			count = count -1;
-			$display("can_data %h count %d", can_data, count);
-			if (count == 0)
-			begin
-				state = 7;
-				count = 4;
-			end
-			else
-			begin
-				state = 6;
-			end
+						5: begin //tratar bit reservado frame dados
+							r0 = can_data;
+							count = 4;			
+							state = 7;
+						end
+						
+						6: begin //pegando os dois bits reservados do esetendido
+							count = count -1;
+							$display("can_data %h count %d", can_data, count);
+							if (count == 0)
+							begin
+								state = 7;
+								count = 4;
+							end
+							else
+							begin
+								state = 6;
+							end
 
-		end
-		7: begin //pegar os 4 bits indicando a quantidade de bytes de dados
-			data_size[count-1] = can_data;
-			count = count -1;
-			if(count == 0)
-			begin
-				//vai pegar os dados agora
-				state = 8;
-			end
-		end
+						end
+						7: begin //pegar os 4 bits indicando a quantidade de bytes de dados
+							data_size[count-1] = can_data;
+							count = count -1;
+							if((count == 0) &&(data_code>0))
+							begin
+								//vai pegar os dados agora
+								count = (8*data_code); // data_code indica o numero de bytes no data field,
+								data_field[(count-1)] = can_data;
+								count = count -1;
+								if (count == 0)
+								begin //pegar CRC
+									count = 15;
+									state = 8;
+								end
+							end
+						end
 
-                8: begin
-			getframe = 1;
-		end
-		default: begin
-                    $display ("Reach undefined state");
-                end
-      endcase
-    end
+						8: begin
+							getframe = 1;
+							end
+						default: begin
+										  $display ("Reach undefined state");
+									 end
+						endcase
+					 end
 endmodule // teste2
