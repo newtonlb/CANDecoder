@@ -32,9 +32,11 @@ output reg ext_frame = 0,
 output reg std_frame = 0,
 output reg rtr_ext = 1'bz,
 output reg remote_frame = 0,
+output reg [3:0] data_size,
 output reg [14:0] crc_field = 0, // CRC Sequence + CRC delimiter
 output reg [1:0] ack_field = 0,
-output reg [3:0] data_size,
+output reg [6:0] end_of_frame,
+output reg crc_delimiter
 );
 
     /*input reset;
@@ -50,7 +52,7 @@ output reg [3:0] data_size,
     parameter state1=0,state2=1,state3=2;
 	*/ 
 	reg [28:0] arbitration_field = 0; 
-	
+	reg previous_bit;
 	reg[7:0] state = 0;
 	reg [9:0] count = 0; //vai contar os bits do Arbitration Field
 	
@@ -58,17 +60,21 @@ output reg [3:0] data_size,
 	reg r0;
 	reg r1;
 	reg r2;
+	reg[2:0] stuffing_counter = 0;
 	
     
 
     always @(posedge sample)
     begin
+    	$display("estado %d", state);
         case (state)
                 0 : begin
                     	if ((can_data == 0)) // start of frame
 							begin
 								state = 1;
 								count = 29;
+								previous_bit = can_data;
+								stuffing_counter = stuffing_counter + 1;
 							
 											
 											
@@ -86,179 +92,463 @@ output reg [3:0] data_size,
                         
                 end
                 1 : begin
-							state = 1;
-							arbitration_field[count-1] = can_data;
-							count = count -1;
-							if(count == 18) // pegou os 11 bits
-							begin
-								state = 2;
-								count = 2;
-							end
+			
+			//logica do stuffing
+			if(stuffing_counter == 5 && can_data != previous_bit)
+			begin
+				$display("é bit de stuffing");
+				previous_bit = can_data;
+				stuffing_counter = 1;
+
+				$display("é um bit de stuffing");
+			
+			end
+			else if(stuffing_counter == 5 && can_data == previous_bit)
+			begin
+				//erro de stuffing
+				$display ("deu erro de stuffing");
+				state = 99;
+			end
+			else
+			begin
+				if(can_data == previous_bit)
+				begin
+					stuffing_counter = stuffing_counter + 1;
+					previous_bit = can_data;
+				end
+				else
+				begin
+					stuffing_counter = 1;
+					previous_bit = can_data;
+				end
+
+				//fim da logica do stuffing
+		
+				state = 1;
+				arbitration_field[count-1] = can_data;
+				count = count -1;
+				if(count == 18) // pegou os 11 bits
+				begin
+					state = 2;
+					count = 2;
+				end
+
+			end
 											 // Acabou o Arbitration Field
 												
 											// Inserting 'else' block to prevent latch inference
-                end
+     				end
                 2 : begin
-                    	srr_rtr_ide[count -1] = can_data;
-							count = count -1;
-							if(count == 0)
-							begin
-								if(srr_rtr_ide == 2'b00)// ï¿½ um frame de dados, 11 bits
-								
-								begin
-									$display ("ï¿½ um frame de dados, 11 bits");
-									bit_id_11 = arbitration_field[28:18];
-									data_frame = 1;
-									std_frame = 1;
-									state = 5;
-									count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
+			if(stuffing_counter == 5 && can_data != previous_bit)
+			begin
+				//é bit de stuffing
+				
+				previous_bit = can_data;
+				stuffing_counter = 1;
+			
+			end
+			else if(stuffing_counter == 5 && can_data == previous_bit)
+			begin
+				//erro de stuffing
+				$display ("deu erro de stuffing");
+				state = 99;
+			end
+			else
+			begin
+				if(can_data == previous_bit)
+				begin
+					stuffing_counter = stuffing_counter + 1;
+					previous_bit = can_data;
+				end
+				else
+				begin
+					stuffing_counter = 1;
+					previous_bit = can_data;
+				end
+                    	
+
+					srr_rtr_ide[count -1] = can_data;
+					count = count -1;
+					if(count == 0)
+					begin
+						if(srr_rtr_ide == 2'b00)// ï¿½ um frame de dados, 11 bits
+						begin
+							$display ("ï¿½ um frame de dados, 11 bits");
+							bit_id_11 = arbitration_field[28:18];
+							data_frame = 1;
+							std_frame = 1;
+							state = 5;
+							count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
 
 
-								end
-								if(srr_rtr_ide == 2'b10)// ï¿½ um frame remote request, 11 bits
-								begin
-									$display ("eh um remote request, 11 bits");
-									bit_id_11 = arbitration_field[28:18];
-									std_frame = 1;
-									remote_frame = 1;
-									state = 5;
-									count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
+						end
+						if(srr_rtr_ide == 2'b10)// ï¿½ um frame remote request, 11 bits
+						begin
+							$display ("eh um remote request, 11 bits");
+							bit_id_11 = arbitration_field[28:18];
+							std_frame = 1;
+							remote_frame = 1;
+							state = 5;
+							count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
 
 									
-								end
-								if(srr_rtr_ide == 2'b11) //ï¿½ o srr e ï¿½ um frame de 29 bits
-									
-								begin
-									$display ("eh um frame de 29 bits");
-									bit_id_11 = arbitration_field[28:18];
-									ext_frame = 1;
-									count = 18;
-									state = 3;
-								
-								end
-               	 	end
 						end
-						
-						3: begin //se for 29 bits, tem que pegar o resto do ID
-						
-						
-							
-							arbitration_field[count-1] = can_data;	
-							count = count -1;
-							
-							if (count == 0) //terminou os 29-bits
-							begin 
-								bit_id_29[28:0] = arbitration_field[28:0];
-								state = 4; //vai pegar o RTR do estendido
-							end
-							
-								
+						if(srr_rtr_ide == 2'b11) //ï¿½ o srr e ï¿½ um frame de 29 bits
+						begin
+							$display ("eh um frame de 29 bits");
+							bit_id_11 = arbitration_field[28:18];
+							ext_frame = 1;
+							count = 18;
+							state = 3;
 								
 						end
+               	 			end
+			end
+		end
+						
+		3: begin
 
-						4: begin //um estado sï¿½ pra pegar o rtr do estendido
-							rtr_ext = can_data;
-							if(rtr_ext == 0)
-							begin
-							$display("ele ta acusando que eh um data frame");
-								data_frame = 1;
+			if(stuffing_counter == 5 && can_data != previous_bit)
+			begin
+				$display("é bit de stuffing");
+				//é bit de stuffing
+				
+				previous_bit = can_data;
+				stuffing_counter = 1;
+			
+			end
+			else if(stuffing_counter == 5 && can_data == previous_bit)
+			begin
+				//erro de stuffing
+				$display ("deu erro de stuffing");
+				state = 99;
+			end
+			else
+			begin
+				if(can_data == previous_bit)
+				begin
+					stuffing_counter = stuffing_counter + 1;
+				end
+				else
+				begin
+					stuffing_counter = 1;
+					previous_bit = can_data;
+				end
+			 	
+
+				//se for 29 bits, tem que pegar o resto do ID
+				arbitration_field[count-1] = can_data;	
+				count = count -1;
+				if (count == 0) //terminou os 29-bits
+				begin 
+					bit_id_29[28:0] = arbitration_field[28:0];
+					state = 4; //vai pegar o RTR do estendido
+				end
+				previous_bit = can_data;
+			end
+							
+								
+								
+		end
+
+		4: begin //um estado pra pegar o rtr do estendido
+			if(stuffing_counter == 5 && can_data != previous_bit)
+			begin
+				//é bit de stuffing
+				$display("é bit de stuffing");
+				previous_bit = can_data;
+				stuffing_counter = 1;
+			
+			end
+			else if(stuffing_counter == 5 && can_data == previous_bit)
+			begin
+				//erro de stuffing
+				$display ("deu erro de stuffing");
+				state = 99;
+			end
+			else
+			begin
+				if(can_data == previous_bit)
+				begin
+					stuffing_counter = stuffing_counter + 1;
+				end
+				else
+				begin
+					stuffing_counter = 1;
+				end
+				
+
+				rtr_ext = can_data;
+				if(rtr_ext == 0)
+				begin
+					$display("ele ta acusando que eh um data frame");
+					data_frame = 1;
 										//ï¿½ um frame de dados estendido
-							end
-							if(rtr_ext == 1)
-							begin
-								remote_frame = 1;
+				end
+				if(rtr_ext == 1)
+				begin
+					remote_frame = 1;
+					$display("ele ta acusando que eh um remote request frame");
 								//ï¿½ um remote frame estendido
-							end
-							state = 6; //pegar os dois bits reservados
-							count = 2;
+				end
+				state = 6; //pegar os dois bits reservados
+				count = 2;
+			end
+			previous_bit = can_data;
 
 						
-						end
+		end
 		
 
-						5: begin //tratar bit reservado frame dados
-							r0 = can_data;
-							count = 4;			
-							state = 7;
-						end
+		5: begin //tratar bit reservado frame dados
+			if(stuffing_counter == 5 && can_data != previous_bit)
+			begin
+				$display("é bit de stuffing");
+				//é bit de stuffing
+				
+				previous_bit = can_data;
+				stuffing_counter = 1;
+			
+			end
+			else if(stuffing_counter == 5 && can_data == previous_bit)
+			begin
+				//erro de stuffing
+				$display ("deu erro de stuffing");
+				state = 99;
+			end
+			else
+			begin
+				if(can_data == previous_bit)
+				begin
+					stuffing_counter = stuffing_counter + 1;
+				end
+				else
+				begin
+					stuffing_counter = 1;
+				end
+				
+				r0 = can_data;
+				count = 4;			
+				state = 7;
+			end
+			previous_bit = can_data;
+		end
 						
-						6: begin //pegando os dois bits reservados do esetendido
-							count = count -1;
-							$display("can_data %h count %d", can_data, count);
-							if (count == 0)
-							begin
-								state = 7;
-								count = 4;
-							end
-							else
-							begin
-								state = 6;
-							end
+		6: begin //pegando os dois bits reservados do esetendido
+				if(stuffing_counter == 5 && can_data != previous_bit)
+				begin
+					$display("é bit de stuffing");
+					//é bit de stuffing
+					
+					previous_bit = can_data;
+					stuffing_counter = 1;
+			
+				end
+				else if(stuffing_counter == 5 && can_data == previous_bit)
+				begin
+					//erro de stuffing
+					$display ("deu erro de stuffing");
+					state = 99;
+				end
+				else
+				begin
+					if(can_data == previous_bit)
+					begin
+						stuffing_counter = stuffing_counter + 1;
+					end
+					else
+					begin
+						stuffing_counter = 1;
+						previous_bit = can_data;
+					end
 
-						end
-						7: begin //pegar os 4 bits indicando a quantidade de bytes de dados
-							data_size[count-1] = can_data;
-							count = count -1;
-							if((count == 0) &&(data_size>0))
-							begin
-								//vai pegar os dados no prÃ³ximo estado
-								count = (8*data_size); // data_size indica o numero de bytes no data field,
-								state = 8;
-							end
-						end
+					count = count -1;
+					$display("can_data %h count %d", can_data, count);
+					if (count == 0)
+					begin
+						state = 7;
+						count = 4;
+					end
+					else
+					begin
+						state = 6;
+					end
+				end
+				previous_bit = can_data;
+		end
 
-						8: begin //pega os dados
-							getframe = 1;
-							data_field[(count-1)] = can_data;
-							count = count -1;
-								if (count == 0)
-								begin //pegar CRC
-									count = 15;
-									state = 9;
-								end
-							end
-						
-						9: begin //sÃ³ pega os dados do CRC, nÃ£o faz nada por enquanto
-							crc_field[count-1] = can_data;
-							count = count-1;
-							if(count == 0)
-							begin
-								count = 2;
-								state = 10;
-							end
+		7: begin //pegar os 4 bits indicando a quantidade de bytes de dados
+
+				if(stuffing_counter == 5 && can_data != previous_bit)
+				begin
+					//é bit de stuffing
+					$display("é bit de stuffing");
+					previous_bit = can_data;
+					stuffing_counter = 1;
+				
+				end
+				else if(stuffing_counter == 5 && can_data == previous_bit)
+				begin
+					//erro de stuffing
+					$display ("deu erro de stuffing");
+					state = 99;
+				end
+				else
+				begin
+					if(can_data == previous_bit)
+					begin
+						stuffing_counter = stuffing_counter + 1;
+					end
+					else
+					begin
+						stuffing_counter = 1;
+					end
+					data_size[count-1] = can_data;
+					count = count -1;
+					if((count == 0) &&(data_size>0))
+					begin
+						//vai pegar os dados no prÃ³ximo estado
+						count = 8*data_size; // data_size indica o numero de bytes no data field,
+						$display("quantidade de bits para pegar %d", count);
+						if(data_frame == 1)
+						begin
+							state = 8; //se for um data frame, ele vai atrás dos dados
+						end
+						else if(remote_frame == 1)
+						begin
+							state = 9; //se for um remote frame, ele vai atrás já do CRC pq n tem data field
+							count = 15;
 						end
 						
-						10: begin
-								ack_field[count-1] = can_data;
-								count = count-1;
-								if(count == 0)
-								begin
-									if(ack_field == 2'b00)//Ã© um nÃ³ enviando dados
-									begin
-										$display ("it's a transmitter");
-										
-									end
-									if(ack_field == 2'b10)//Ã© um nÃ³ dizendo que recebeu a mensagem corretamente
-									begin
-										$display ("it's a receiver");
-									end
-									count = 7;
-									state = 11;
-								end
-						end
+					end
+				end
+				previous_bit = can_data;
+			end
+
+		8: begin //pega os dados
+				$display("stuffing counter %d", stuffing_counter);
+				if(stuffing_counter == 5 && can_data != previous_bit)
+				begin
+					$display("é bit de stuffing");
+					
+					previous_bit = can_data;
+					stuffing_counter = 1;
+				
+				end
+				else if(stuffing_counter == 5 && can_data == previous_bit)
+				begin
+					//erro de stuffing
+					$display ("deu erro de stuffing");
+					state = 99;
+				end
+				else
+				begin
+					if(can_data == previous_bit)
+					begin
+						stuffing_counter = stuffing_counter + 1;
+					end
+					else
+					begin
+						stuffing_counter = 1;
+					end
+					
+					data_field[(count-1)] = can_data;
+					count = count -1;
+					if (count == 0)
+					begin //pegar CRC
+						count = 15;
+						state = 9;
+					end
+				end
+				previous_bit = can_data;
+
+			end
+		
+		9: begin //sÃ³ pega os dados do CRC, nÃ£o faz nada por enquanto
+			
+			if(stuffing_counter == 5 && can_data != previous_bit)
+				begin
+					$display("é bit de stuffing");
+					
+					previous_bit = can_data;
+					stuffing_counter = 1;
+				
+				end
+				else if(stuffing_counter == 5 && can_data == previous_bit)
+				begin
+					//erro de stuffing
+					$display ("deu erro de stuffing");
+					state = 99;
+				end
+				else
+				begin
+					if(can_data == previous_bit)
+					begin
+						stuffing_counter = stuffing_counter + 1;
+					end
+					else
+					begin
+						stuffing_counter = 1;
+					end
+
+					crc_field[count-1] = can_data;
+					count = count-1;
+					if(count == 0)
+					begin
+						count = 2;
+						state = 10;
+					end
+				end
+				previous_bit = can_data;
+		end
+
+
+		10 : begin //crc delimiter
+			crc_delimiter = can_data;
+			if(crc_delimiter ==  1)
+			begin
+				//ta de boa
+				state = 11;
+			end
+			else begin
+				//deu merda
+				state = 99;
+			end
+			
+		end
+		
+		11: begin
+				ack_field[count-1] = can_data;
+				count = count-1;
+				if(count == 0)
+				begin
+					if(ack_field == 2'b11)//Ã© um nÃ³ enviando dados
+					begin
+						$display ("it's a transmitter");
 						
-						11: begin
-							end_of_frame[count-1] = can_data;
-							count = count-1;
-							if (count == 0)
-							begin
-								$display ("it's over");
-							end
-						end
-						
-						default: begin
-										  $display ("Reach undefined state");
-									 end
-						endcase
-					 end
+					end
+					if(ack_field == 2'b01)//Ã© um nÃ³ dizendo que recebeu a mensagem corretamente
+					begin
+						$display ("it's a receiver");
+					end
+					count = 7;
+					state = 12;
+				end
+		end
+		
+		12: begin
+			end_of_frame[count-1] = can_data;
+			count = count-1;
+			if (count == 0)
+			begin
+				$display ("it's over");
+			end
+		end
+		
+		default: begin
+			$display ("Reach undefined state");
+			end
+		endcase
+	end
+		
 endmodule // teste2
