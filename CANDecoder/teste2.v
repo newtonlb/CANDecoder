@@ -25,7 +25,6 @@ input sample,
 output reg [10:0] bit_id_11 =11'bz,
 output reg [28:0] bit_id_29 = 29'bz,
 output reg [1:0] srr_rtr_ide = 0,
-output reg [3:0] data_code =0,
 output reg [64:0] data_field = 64'bz, // dados do data field pode ter até 64 bits
 output reg data_frame = 0,
 output reg getframe = 0,
@@ -33,7 +32,9 @@ output reg ext_frame = 0,
 output reg std_frame = 0,
 output reg rtr_ext = 1'bz,
 output reg remote_frame = 0,
-output reg [3:0] data_size
+output reg [14:0] crc_field = 0, // CRC Sequence + CRC delimiter
+output reg [1:0] ack_field = 0,
+output reg [3:0] data_size,
 );
 
     /*input reset;
@@ -52,6 +53,7 @@ output reg [3:0] data_size
 	
 	reg[7:0] state = 0;
 	reg [9:0] count = 0; //vai contar os bits do Arbitration Field
+	
 	reg s0;
 	reg r0;
 	reg r1;
@@ -197,23 +199,63 @@ output reg [3:0] data_size
 						7: begin //pegar os 4 bits indicando a quantidade de bytes de dados
 							data_size[count-1] = can_data;
 							count = count -1;
-							if((count == 0) &&(data_code>0))
+							if((count == 0) &&(data_size>0))
 							begin
-								//vai pegar os dados agora
-								count = (8*data_code); // data_code indica o numero de bytes no data field,
-								data_field[(count-1)] = can_data;
-								count = count -1;
-								if (count == 0)
-								begin //pegar CRC
-									count = 15;
-									state = 8;
-								end
+								//vai pegar os dados no próximo estado
+								count = (8*data_size); // data_size indica o numero de bytes no data field,
+								state = 8;
 							end
 						end
 
-						8: begin
+						8: begin //pega os dados
 							getframe = 1;
+							data_field[(count-1)] = can_data;
+							count = count -1;
+								if (count == 0)
+								begin //pegar CRC
+									count = 15;
+									state = 9;
+								end
 							end
+						
+						9: begin //só pega os dados do CRC, não faz nada por enquanto
+							crc_field[count-1] = can_data;
+							count = count-1;
+							if(count == 0)
+							begin
+								count = 2;
+								state = 10;
+							end
+						end
+						
+						10: begin
+								ack_field[count-1] = can_data;
+								count = count-1;
+								if(count == 0)
+								begin
+									if(ack_field == 2'b00)//é um nó enviando dados
+									begin
+										$display ("it's a transmitter");
+										
+									end
+									if(ack_field == 2'b10)//é um nó dizendo que recebeu a mensagem corretamente
+									begin
+										$display ("it's a receiver");
+									end
+									count = 7;
+									state = 11;
+								end
+						end
+						
+						11: begin
+							end_of_frame[count-1] = can_data;
+							count = count-1;
+							if (count == 0)
+							begin
+								$display ("it's over");
+							end
+						end
+						
 						default: begin
 										  $display ("Reach undefined state");
 									 end
