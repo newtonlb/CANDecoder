@@ -34,7 +34,8 @@ output reg rtr_ext = 1'bz,
 output reg remote_frame = 0,
 output reg [14:0] crc_field = 0, // CRC Sequence + CRC delimiter
 output reg [1:0] ack_field = 0,
-output reg [3:0] data_size,
+output reg [6:0] end_of_frame = 0,
+output reg [3:0] data_size
 );
 
     /*input reset;
@@ -209,7 +210,7 @@ output reg [3:0] data_size,
 
 						8: begin //pega os dados
 							getframe = 1;
-							data_field[(count-1)] = can_data;
+							data_field[count-1] = can_data;
 							count = count -1;
 								if (count == 0)
 								begin //pegar CRC
