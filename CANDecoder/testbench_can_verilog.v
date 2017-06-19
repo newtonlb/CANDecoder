@@ -20,6 +20,17 @@ module testbench;
 	wire [1:0] ack_field;
 	wire [6:0] end_of_frame;
 	wire crc_delimiter;
+	wire [5:0] error_flag  = 6'bzzzzzz;
+	wire [1:0] previous_frame = 2'bzz;
+	wire is_error_frame;
+	wire [13:0] error_frame;
+	wire error_type;
+	wire [13:0] overload_frame;
+	wire crc_error;
+	wire frame_error;
+	wire ack_error;
+	wire stuffing_error;
+	wire output_error;
 	
 	
 
@@ -38,14 +49,14 @@ module testbench;
 	//logic A, clk;
 	//logic [127:0]buffer;
 	//reg [71:0] mensagem = 72'b100000100101000001000100000100101000011000001001011111111110000000001111; // frame de dados normal
-	reg [62:0] mensagem = 63'b100000100101001000001101000011000001001011111111110000000001111; // frame de dados normal
+	//reg [62:0] mensagem = 63'b100000100101001000001101000011000001001011111111110000000001111; // frame de dados normal
 
 
 	//reg [78:0] mensagem = 79'b1000001001010011101010101010101010000010010000010010100001100000100101111111111; // frame de dados estendido
 	//reg [69:0] mensagem = 70'b1000001001010011101010101010101010100000110100001100000100101111111111; // frame de rtr estendido
 	//reg [78:0] mensagem = 79'b1000001001010011101010101010101010000010010000010010100001100000100101111111111;
 	//reg [70:0] mensagem = 71'b100000100101001110101010101010101010010010100001100000100101111111111; // frame rtr estendido
-
+	reg [232:0] mensagem = {2'b11, 1'b0, 11'h551, 3'b000, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111 ,2'b11, 1'b1, 2'b11, 1'b0, 11'h1AF, 3'b000, 4'b0100, 32'hABCD1234, 15'd09908, 3'b101, 7'b1111111, 3'b111, 2'b11, 1'b0, 6'b000000, 5'b00000, 8'hFF, 3'b111, 1'b0, 11'h0A1, 3'b100, 4'b0011 , 15'h1eed, 3'b101 , 7'b1111111 ,3'b111};	
 
 	
 	wire [10:0] frame_id_a;
@@ -67,12 +78,24 @@ module testbench;
 	.crc_field(crc_field),
 	.ack_field(ack_field),
 	.end_of_frame(end_of_frame),
-	.crc_delimiter(crc_delimiter)
+	.crc_delimiter(crc_delimiter),
+	.error_flag(error_flag),
+	.previous_frame(previous_frame),
+	.is_error_frame(is_error_frame),
+	.error_frame(error_frame),
+	.error_type(error_type),
+	.overload_frame(overload_frame),
+	.crc_error(crc_error),
+	.frame_error(frame_error),
+	.ack_error(ack_error),
+	.stuffing_error(stuffing_error),
+	.overload_error(overload_error)
+
 	);
 	
 	always begin
 		sample = 1;
-		can_data = mensagem[63-contador];
+		can_data = mensagem[233-contador];
 		$display(" enviando bit: %h", can_data);
 		#1 //10nsec
 		sample = 0;

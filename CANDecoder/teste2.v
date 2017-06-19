@@ -36,7 +36,18 @@ output reg [3:0] data_size,
 output reg [14:0] crc_field = 0, // CRC Sequence + CRC delimiter
 output reg [1:0] ack_field = 0,
 output reg [6:0] end_of_frame,
-output reg crc_delimiter
+output reg crc_delimiter,
+output reg [5:0] error_flag  = 6'bzzzzzz,
+output reg [1:0] previous_frame = 2'bzz,
+output reg is_error_frame,
+output reg [13:0] error_frame,
+output reg error_type, //0 ativo, 1 passivo
+output reg [13:0] overload_frame,
+output reg crc_error,
+output reg frame_error,
+output reg ack_error,
+output reg stuffing_error,
+output reg overload_error
 );
 
     /*input reset;
@@ -61,6 +72,8 @@ output reg crc_delimiter
 	reg r1;
 	reg r2;
 	reg[2:0] stuffing_counter = 0;
+	reg start_of_frame;
+	reg [2:0] inter_frame;
 	
     
 
@@ -85,10 +98,16 @@ output reg crc_delimiter
 								count = count + 1;
 								if(count == 6)
 								begin
-									$display ("deu erro");//vai dar erro aqui pq veio 6 bits 1
+									$display ("deu passive error");
+									error_type = 1;
+									error_flag = 6'b111111;
+									state = 99;
+									count = 14;
+
 								end
 							end
-								
+							
+							start_of_frame = can_data;	
                         
                 end
                 1 : begin
@@ -108,6 +127,8 @@ output reg crc_delimiter
 				//erro de stuffing
 				$display ("deu erro de stuffing");
 				state = 99;
+				count = 14;
+
 			end
 			else
 			begin
@@ -123,10 +144,24 @@ output reg crc_delimiter
 				end
 
 				//fim da logica do stuffing
-		
+				
 				state = 1;
 				arbitration_field[count-1] = can_data;
 				count = count -1;
+				if(count == 24) //passaram 5 bits pra verificar se o start of frame + 5 primeiros bits do arbitration são 0
+				error_flag = {start_of_frame, arbitration_field[28:24]};
+				if(error_flag == 6'b000000 && previous_frame == 2'b00)
+				begin
+					//é um frame de erro
+					$display("vai começar o frame de erro");
+					error_flag = 6'bzzzzzz;
+
+					is_error_frame = 1;
+					state = 99;
+				end
+
+
+
 				if(count == 18) // pegou os 11 bits
 				begin
 					state = 2;
@@ -150,8 +185,17 @@ output reg crc_delimiter
 			else if(stuffing_counter == 5 && can_data == previous_bit)
 			begin
 				//erro de stuffing
+				if(can_data == 1)
+				begin
+					//frame de erro passivo
+				end
+				else begin
+					//frame de erro ativo
+				end
 				$display ("deu erro de stuffing");
+
 				state = 99;
+				count = 14;
 			end
 			else
 			begin
@@ -176,24 +220,26 @@ output reg crc_delimiter
 							$display ("ï¿½ um frame de dados, 11 bits");
 							bit_id_11 = arbitration_field[28:18];
 							data_frame = 1;
+							remote_frame = 0;
 							std_frame = 1;
 							state = 5;
 							count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
 
 
 						end
-						if(srr_rtr_ide == 2'b10)// ï¿½ um frame remote request, 11 bits
+						else if(srr_rtr_ide == 2'b10)// ï¿½ um frame remote request, 11 bits
 						begin
 							$display ("eh um remote request, 11 bits");
 							bit_id_11 = arbitration_field[28:18];
 							std_frame = 1;
 							remote_frame = 1;
+							data_frame = 0;
 							state = 5;
 							count = 4; //qndo for para pegar o control field sÃ£o 4bits do DLC mais r0
 
 									
 						end
-						if(srr_rtr_ide == 2'b11) //ï¿½ o srr e ï¿½ um frame de 29 bits
+						else if(srr_rtr_ide == 2'b11) //ï¿½ o srr e ï¿½ um frame de 29 bits
 						begin
 							$display ("eh um frame de 29 bits");
 							bit_id_11 = arbitration_field[28:18];
@@ -201,6 +247,11 @@ output reg crc_delimiter
 							count = 18;
 							state = 3;
 								
+						end
+						else begin //01 é um frame error
+							$display("reserved bit must be set to dominant if frame is 11 bit");
+							count = 14;
+							state = 99;
 						end
                	 			end
 			end
@@ -222,6 +273,8 @@ output reg crc_delimiter
 				//erro de stuffing
 				$display ("deu erro de stuffing");
 				state = 99;
+				count = 14;
+
 			end
 			else
 			begin
@@ -265,6 +318,7 @@ output reg crc_delimiter
 				//erro de stuffing
 				$display ("deu erro de stuffing");
 				state = 99;
+				count = 14;
 			end
 			else
 			begin
@@ -315,6 +369,7 @@ output reg crc_delimiter
 				//erro de stuffing
 				$display ("deu erro de stuffing");
 				state = 99;
+				count = 14;
 			end
 			else
 			begin
@@ -328,6 +383,7 @@ output reg crc_delimiter
 				end
 				
 				r0 = can_data;
+
 				count = 4;			
 				state = 7;
 			end
@@ -349,6 +405,7 @@ output reg crc_delimiter
 					//erro de stuffing
 					$display ("deu erro de stuffing");
 					state = 99;
+					count = 14;
 				end
 				else
 				begin
@@ -392,6 +449,7 @@ output reg crc_delimiter
 					//erro de stuffing
 					$display ("deu erro de stuffing");
 					state = 99;
+					count = 14;
 				end
 				else
 				begin
@@ -440,6 +498,7 @@ output reg crc_delimiter
 					//erro de stuffing
 					$display ("deu erro de stuffing");
 					state = 99;
+					count = 14;
 				end
 				else
 				begin
@@ -478,7 +537,9 @@ output reg crc_delimiter
 				begin
 					//erro de stuffing
 					$display ("deu erro de stuffing");
+					
 					state = 99;
+					count = 14;
 				end
 				else
 				begin
@@ -512,7 +573,10 @@ output reg crc_delimiter
 			end
 			else begin
 				//deu merda
+				//frame error
+				crc_error = 1;
 				state = 99;
+				count = 14;
 			end
 			
 		end
@@ -525,25 +589,113 @@ output reg crc_delimiter
 					if(ack_field == 2'b11)//Ã© um nÃ³ enviando dados
 					begin
 						$display ("it's a transmitter");
+						count = 7;
+						state = 12;
 						
 					end
 					if(ack_field == 2'b01)//Ã© um nÃ³ dizendo que recebeu a mensagem corretamente
 					begin
 						$display ("it's a receiver");
+						count = 7;
+						state = 12;
 					end
-					count = 7;
-					state = 12;
+					else begin
+						$display("ack delimiter error");
+						state = 99;
+						ack_error = 1;
+						count = 14;
+					end
+					
+					
 				end
 		end
 		
 		12: begin
-			end_of_frame[count-1] = can_data;
-			count = count-1;
+
+			if(can_data == 1)
+			begin
+				end_of_frame[count-1] = can_data;
+				count = count-1;
+				if (count == 0)
+				begin
+					$display ("it's over");
+					state = 98;
+					count = 3;
+				end
+			end
+				else 
+				begin
+					if(count > 0)
+					begin
+				//eof error
+
+
+					end
+				end
+
+			
+		end
+		97 : begin
+			overload_frame[count-1] = can_data;
 			if (count == 0)
 			begin
-				$display ("it's over");
+				if(overload_frame == 14'b00000011111111)
+				begin
+					overload_error = 1;
+					//o overloadframe veio de boa
+					//vai direto pro bus idle
+					state = 0;
+				end
 			end
 		end
+
+		98 : begin
+
+			inter_frame[count-1] = can_data;
+			count = count - 1;
+			$display("count : %d", count);
+			if (count == 0)
+			begin
+				if (inter_frame == 3'b111)
+				begin
+					stuffing_counter = 0;
+					state = 0; //vai pro bus idle
+				end
+				else begin
+				//OVERLOAD ERROR
+					state = 97;
+					count = 14;
+				end
+			end
+		end
+		99 : begin //vai começar a fazer o frame de erro
+				error_frame[count-1] = can_data;
+				count = count - 1;
+				$display("count %d", count);
+				if(count == 8)
+				begin
+					if(error_frame[13:8] == 6'b000000)
+					begin
+						error_type = 0; //é ativo
+					end
+					else begin
+						error_type  = 1; //é passivo
+					end
+				end
+				if(count == 0)
+				begin
+					if(error_frame[7:0] == 8'b11111111)
+					begin
+						//o error frame apareceu certinho
+						state = 98;
+						count = 3;
+					end
+				end
+		end
+			
+
+			
+		
 		
 		default: begin
 			$display ("Reach undefined state");
