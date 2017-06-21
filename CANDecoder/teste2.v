@@ -95,16 +95,7 @@ output reg overload_error
 							else //bit 1
 							begin
 								state = 0;
-								count = count + 1;
-								if(count == 6)
-								begin
-									$display ("deu passive error");
-									error_type = 1;
-									error_flag = 6'b111111;
-									state = 99;
-									count = 14;
-
-								end
+								
 							end
 							
 							start_of_frame = can_data;	
@@ -661,8 +652,17 @@ output reg overload_error
 					stuffing_counter = 0;
 					state = 0; //vai pro bus idle
 				end
-				else begin
+				else if(inter_frame == 3'b110) 
+				begin
 				//OVERLOAD ERROR
+					state = 1;
+					count = 29;
+					previous_bit = can_data;
+					tuffing_counter = stuffing_counter + 1;
+				end
+				else
+				begin
+					//OVERLOAD ERROR
 					state = 97;
 					count = 14;
 				end
