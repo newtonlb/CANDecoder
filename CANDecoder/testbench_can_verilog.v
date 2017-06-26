@@ -45,6 +45,7 @@ module testbench;
    
 	//remote request extended frame
 	//reg [35:0] mensagem = {2'b11, 1'b0, 11'h552, 2'b11, 18'h8320, 2'b10};
+//reg [113:0] mensagem = {2'b11, 1'b0, 11'h552, 2'b11, 18'h8320, 2'b10, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111 ,2'b11, 1'b1, 2'b11, 1'b0, 11'h1AF};
 	//frame_builder f(.*);
 	//logic A, clk;
 	//logic [127:0]buffer;
@@ -56,10 +57,19 @@ module testbench;
 	//reg [69:0] mensagem = 70'b1000001001010011101010101010101010100000110100001100000100101111111111; // frame de rtr estendido
 	//reg [78:0] mensagem = 79'b1000001001010011101010101010101010000010010000010010100001100000100101111111111;
 	//reg [70:0] mensagem = 71'b100000100101001110101010101010101010010010100001100000100101111111111; // frame rtr estendido
-	reg [232:0] mensagem = {2'b11, 1'b0, 11'h551, 3'b000, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111 ,2'b11, 1'b1, 2'b11, 1'b0, 11'h1AF, 3'b000, 4'b0100, 32'hABCD1234, 15'd09908, 3'b101, 7'b1111111, 3'b111, 2'b11, 1'b0, 6'b000000, 5'b00000, 8'hFF, 3'b111, 1'b0, 11'h0A1, 3'b100, 4'b0011 , 15'h1eed, 3'b101 , 7'b1111111 ,3'b111};	
-
+//reg [85:0] mensagem = {5'b11111, 1'b0, 11'h551, 3'b000, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111 ,5'b11111}; 
+	//frame de dados (receiver) + interframe +frame de dados + erro + remote frame
+	//reg [232:0] mensagem = {2'b11, 1'b0, 11'h551, 3'b000, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111 ,2'b11, 1'b1, 2'b11, 1'b0, 11'h1AF, 3'b000, 4'b0100, 32'hABCD1234, 15'd09908, 3'b101, 7'b1111111, 3'b111, 2'b11, 1'b0, 6'b000000, 5'b00000, 8'hFF, 3'b111, 1'b0, 11'h0A1, 3'b100, 4'b0011 , 15'h1eed, 3'b101 , 7'b1111111 ,3'b111};	
+//remote request + frame de dados + erro + remote request 500ns
+	//reg [200:0] mensagem = {2'b11, 1'b0, 11'h0A1, 3'b100, 4'b0100  , 15'd30322, 3'b101 , 7'b1111111 ,2'b11, 1'b1, 2'b11, 1'b0, 11'h1AF, 3'b000, 4'b0100, 32'hABCD1234, 15'd09908, 3'b101, 7'b1111111, 3'b111, 2'b11, 1'b0, 6'b000000, 5'b00000, 8'hFF, 3'b111, 1'b0, 11'h0A1, 3'b100, 4'b0011 , 15'h1eed, 3'b101 , 7'b1111111 ,3'b111};	
 	
-	wire [10:0] frame_id_a;
+	reg [246:0] mensagem = {2'b11, 1'b0, 11'h551, 3'b000, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111 ,2'b11, 1'b1, 2'b11, 1'b0, 11'h1AF, 3'b000, 4'b0100, 32'hABCD1234, 15'd09908, 3'b101, 7'b1111111, 3'b111, 2'b11, 1'b0, 6'b000000, 5'b00000, 8'hFF, 6'b000000, 8'hFF, 3'b111, 1'b0, 11'h0A1, 3'b100, 4'b0011 , 15'h1eed, 3'b101 , 7'b1111111 ,3'b111};
+
+//frame de dado + frame remoto + frame de dados
+//reg [126:0] mensagem = {2'b11, 1'b0, 11'h551, 3'b000, 4'b0100 ,  32'hABCD1234 , 15'd30322, 3'b101 , 7'b1111111, 2'b11, 1'b0, 11'h0A1, 3'b100, 4'b0100  , 15'd30322, 3'b101 , 7'b1111111, 3'b111};	
+
+
+wire [10:0] frame_id_a;
 	
 	teste2 t(
 	.can_data(can_data), 
@@ -95,7 +105,7 @@ module testbench;
 	
 	always begin
 		sample = 1;
-		can_data = mensagem[233-contador];
+		can_data = mensagem[247-contador];
 		$display(" enviando bit: %h", can_data);
 		#1 //10nsec
 		sample = 0;
@@ -113,10 +123,23 @@ module testbench;
 				$display("frame de dados ID [11-bits] da mensagem: %h" , bit_id_11);
 				$display("tamanho do dado: %d", data_size);
 			end
-			if(remote_frame)
+			else if(remote_frame)
 			begin
 				$display("                                            ");
 				$display("frame remote request ID [11-bits] da mensagem: %h" , bit_id_11);
+			end
+			else if (is_error_frame)
+			begin
+				$display("                                            ");
+				$display("error frame ");
+				if(error_type)
+				begin
+					$display("erro ativo");
+				end
+				else
+					$display("erro passivo");
+				begin
+				end
 			end
 		end
 
@@ -133,6 +156,26 @@ module testbench;
 			begin
 				$display("                                            ");
 				$display("frame remote request ID [11-bits] da mensagem: %h" , bit_id_29);
+			end
+			else if (is_error_frame)
+			begin
+				$display("                                            ");
+				$display("error frame ");
+				if(error_type)
+				begin
+					$display("                                            ");
+					$display("erro ativo");
+				end
+				else
+					$display("                                            ");
+					$display("erro passivo");
+				begin
+				end
+			end
+			else
+			begin
+				$display("                                            ");
+				$display("overload frame");
 			end
 		end
 	end

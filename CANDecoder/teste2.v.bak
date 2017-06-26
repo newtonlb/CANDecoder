@@ -42,7 +42,7 @@ output reg [1:0] previous_frame = 2'bzz,
 output reg is_error_frame,
 output reg [13:0] error_frame,
 output reg error_type, //0 ativo, 1 passivo
-output reg [13:0] overload_frame,
+output reg [12:0] overload_frame,
 output reg crc_error,
 output reg frame_error,
 output reg ack_error,
@@ -82,6 +82,8 @@ output reg overload_error
     	$display("estado %d", state);
         case (state)
                 0 : begin
+					data_frame = 0;
+					remote_frame = 0;
                     	if ((can_data == 0)) // start of frame
 							begin
 								state = 1;
@@ -206,9 +208,9 @@ output reg overload_error
 					count = count -1;
 					if(count == 0)
 					begin
-						if(srr_rtr_ide == 2'b00)// ï¿½ um frame de dados, 11 bits
+						if(srr_rtr_ide == 2'b00)// eh um frame de dados, 11 bits
 						begin
-							$display ("ï¿½ um frame de dados, 11 bits");
+							$display ("eh um frame de dados, 11 bits");
 							bit_id_11 = arbitration_field[28:18];
 							data_frame = 1;
 							remote_frame = 0;
@@ -218,7 +220,7 @@ output reg overload_error
 
 
 						end
-						else if(srr_rtr_ide == 2'b10)// ï¿½ um frame remote request, 11 bits
+						else if(srr_rtr_ide == 2'b10)// eh um frame remote request, 11 bits
 						begin
 							$display ("eh um remote request, 11 bits");
 							bit_id_11 = arbitration_field[28:18];
@@ -230,7 +232,7 @@ output reg overload_error
 
 									
 						end
-						else if(srr_rtr_ide == 2'b11) //ï¿½ o srr e ï¿½ um frame de 29 bits
+						else if(srr_rtr_ide == 2'b11) //eh o srr e eh um frame de 29 bits
 						begin
 							$display ("eh um frame de 29 bits");
 							bit_id_11 = arbitration_field[28:18];
@@ -239,7 +241,7 @@ output reg overload_error
 							state = 3;
 								
 						end
-						else begin //01 é um frame error
+						else begin //01 eh um frame error
 							$display("reserved bit must be set to dominant if frame is 11 bit");
 							count = 14;
 							state = 99;
@@ -326,14 +328,14 @@ output reg overload_error
 				rtr_ext = can_data;
 				if(rtr_ext == 0)
 				begin
-					$display("ele ta acusando que eh um data frame");
+					$display("ele ta acusando que eh um data frame estendido");
 					data_frame = 1;
 										//ï¿½ um frame de dados estendido
 				end
 				if(rtr_ext == 1)
 				begin
 					remote_frame = 1;
-					$display("ele ta acusando que eh um remote request frame");
+					$display("ele ta acusando que eh um remote request frame estendido");
 								//ï¿½ um remote frame estendido
 				end
 				state = 6; //pegar os dois bits reservados
@@ -454,10 +456,19 @@ output reg overload_error
 					end
 					data_size[count-1] = can_data;
 					count = count -1;
-					if((count == 0) &&(data_size>0))
+					if(count == 0)
 					begin
 						//vai pegar os dados no prÃ³ximo estado
 						count = 8*data_size; // data_size indica o numero de bytes no data field,
+						if(count > 64)
+						begin
+							count = 64;
+						end
+						if(count == 0)
+						begin
+							state = 9; //vai direto pro crc
+							count = 15;
+						end
 						$display("quantidade de bits para pegar %d", count);
 						if(data_frame == 1)
 						begin
@@ -470,6 +481,7 @@ output reg overload_error
 						end
 						
 					end
+					
 				end
 				previous_bit = can_data;
 			end
@@ -614,37 +626,40 @@ output reg overload_error
 					count = 3;
 				end
 			end
-				else 
+			else 
+			begin
+				if(count > 0)
 				begin
-					if(count > 0)
-					begin
 				//eof error
-
-
-					end
+				$display("end of frame error");
+				state = 99;
+				count = 14;
 				end
+			end
 
 			
 		end
 		97 : begin
 			overload_frame[count-1] = can_data;
+			count = count - 1;
 			if (count == 0)
 			begin
-				if(overload_frame == 14'b00000011111111)
+				if(overload_frame == 13'b0000011111111)
 				begin
 					overload_error = 1;
 					//o overloadframe veio de boa
 					//vai direto pro bus idle
-					state = 0;
+					state = 98;
 				end
 			end
 		end
 
 		98 : begin
-
+			
 			inter_frame[count-1] = can_data;
 			count = count - 1;
 			$display("count : %d", count);
+			$display("ta no interframe");
 			if (count == 0)
 			begin
 				if (inter_frame == 3'b111)
@@ -654,14 +669,23 @@ output reg overload_error
 				end
 				else if(inter_frame == 3'b110) 
 				begin
-				//OVERLOAD ERROR
-					state = 0;
+				//START OF FRAME
+					state = 1;
+					count = 29;
+					previous_bit = can_data;
+					stuffing_counter = stuffing_counter + 1;
+					data_frame = 0;
+					remote_frame = 0;
 				end
-				else
+				
+			end
+			else
+			begin
+				if(can_data == 0)
 				begin
 					//OVERLOAD ERROR
 					state = 97;
-					count = 14;
+					count = 13;
 				end
 			end
 		end
